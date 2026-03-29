@@ -355,39 +355,6 @@
 
     #main-body { align-items: stretch; }
 
-    /* Sidebar nav */
-    nav {
-      order: -1;
-      width: 220px;
-      flex-shrink: 0;
-      flex-direction: column;
-      border-top: none;
-      border-right: 1px solid var(--border);
-      padding: 16px 10px;
-      padding-bottom: var(--safe-bottom);
-      gap: 4px;
-      align-items: stretch;
-      height: auto;
-      min-height: 100%;
-    }
-    nav button {
-      flex-direction: row;
-      justify-content: flex-start;
-      padding: 10px 14px;
-      font-size: 14px;
-      gap: 10px;
-      border-radius: 10px;
-      width: 100%;
-    }
-    nav button .nav-icon { font-size: 18px; }
-    nav button.active {
-      background: rgba(253,185,39,.1);
-      color: var(--accent);
-    }
-    [data-theme="light"] nav button.active {
-      background: rgba(85,37,131,.08);
-    }
-
     /* Content side */
     #tabs-content { flex: 1; overflow-y: auto; }
     .tab-panel { padding: 24px 32px 32px; max-width: 820px; }
