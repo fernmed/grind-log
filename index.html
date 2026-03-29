@@ -270,32 +270,11 @@
   .hist-section-title::after {
     content: ''; flex: 1; height: 1px; background: var(--border);
   }
-  .hist-ex { margin-bottom: 10px; }
+  .hist-ex { display: flex; align-items: baseline; gap: 10px; margin-bottom: 7px; }
   .hist-ex:last-child { margin-bottom: 0; }
-  .hist-ex-name { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 5px; }
-  .hist-sets-table { width: 100%; border-collapse: collapse; }
-  .hist-sets-table th {
-    font-size: 10px; color: var(--muted); font-weight: 600; text-transform: uppercase;
-    letter-spacing: .5px; text-align: center; padding: 0 6px 4px;
-  }
-  .hist-sets-table th:first-child { text-align: left; width: 28px; }
-  .hist-sets-table td {
-    font-size: 13px; color: var(--text); text-align: center;
-    padding: 3px 6px; background: var(--bg); border-radius: 0;
-  }
-  .hist-sets-table tr:first-child td { border-radius: 6px 6px 0 0; }
-  .hist-sets-table tr:last-child td { border-radius: 0 0 6px 6px; }
-  .hist-sets-table tr:only-child td { border-radius: 6px; }
-  .hist-sets-table td:first-child { color: var(--muted); font-size: 11px; font-weight: 600; text-align: left; }
-  .hist-cardio-grid {
-    display: grid; grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-  }
-  .hist-cardio-item {
-    background: var(--bg); border-radius: 8px; padding: 8px 10px; text-align: center;
-  }
-  .hist-cardio-label { font-size: 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
-  .hist-cardio-value { font-size: 14px; font-weight: 600; color: var(--text); margin-top: 2px; }
+  .hist-ex-name { font-size: 13px; font-weight: 600; color: var(--text); min-width: 110px; flex-shrink: 0; }
+  .hist-ex-sets { font-size: 13px; color: var(--muted); }
+  .hist-cardio-inline { font-size: 13px; color: var(--text); }
   .hist-notes {
     background: var(--bg); border-radius: 8px; padding: 10px 12px;
     font-size: 13px; color: var(--muted); font-style: italic; line-height: 1.5;
@@ -1029,19 +1008,7 @@ function renderHistory() {
       const rows = sess.exercises.map(ex => `
         <div class="hist-ex">
           <div class="hist-ex-name">${ex.name}</div>
-          <table class="hist-sets-table">
-            <thead><tr>
-              <th>#</th><th>Reps</th><th>Weight</th>
-            </tr></thead>
-            <tbody>
-              ${ex.sets.map((s,i) => `
-                <tr>
-                  <td>${i+1}</td>
-                  <td>${s.reps}</td>
-                  <td>${s.weight}</td>
-                </tr>`).join('')}
-            </tbody>
-          </table>
+          <div class="hist-ex-sets">${ex.sets.map(s => `${s.weight}×${s.reps}`).join(' · ')}</div>
         </div>`).join('');
       bodyHTML += `
         <div class="hist-section">
@@ -1052,22 +1019,16 @@ function renderHistory() {
 
     if (sess.cardioData) {
       const c = sess.cardioData;
-      const items = [
-        { label: 'Type',     value: capitalize(c.type) },
-        { label: 'Duration', value: c.duration || '—' },
-        { label: 'Distance', value: c.distance || '—' },
-        { label: 'Pace',     value: c.pace     || '—' },
-      ].filter((it, i) => i === 0 || it.value !== '—');
+      const parts = [
+        capitalize(c.type),
+        c.duration || null,
+        c.distance || null,
+        c.pace     || null,
+      ].filter(Boolean);
       bodyHTML += `
         <div class="hist-section">
           <div class="hist-section-title">🏃 Cardio</div>
-          <div class="hist-cardio-grid">
-            ${items.map(it => `
-              <div class="hist-cardio-item">
-                <div class="hist-cardio-label">${it.label}</div>
-                <div class="hist-cardio-value">${it.value}</div>
-              </div>`).join('')}
-          </div>
+          <div class="hist-cardio-inline">${parts.join(' · ')}</div>
         </div>`;
     }
 
