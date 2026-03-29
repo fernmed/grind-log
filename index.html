@@ -13,6 +13,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <style>
   :root {
     --bg: #0d0d0d;
@@ -273,6 +276,42 @@
     opacity: 0; transition: all .3s; pointer-events: none; white-space: nowrap;
   }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* Auth */
+  .header-right { display: flex; align-items: center; gap: 10px; }
+  .sync-dot {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--muted);
+    transition: background .3s; flex-shrink: 0;
+  }
+  .sync-dot.synced { background: var(--success); }
+  .sync-dot.syncing { background: var(--accent); animation: pulse .8s infinite alternate; }
+  .sync-dot.error { background: var(--danger); }
+  @keyframes pulse { from { opacity: 1; } to { opacity: .3; } }
+  .auth-btn {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 5px 10px; font-size: 12px; font-weight: 500;
+    cursor: pointer; font-family: 'DM Sans', sans-serif; white-space: nowrap;
+    transition: border-color .15s;
+  }
+  .auth-btn:hover { border-color: var(--accent); }
+  .user-avatar {
+    width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--border);
+    cursor: pointer; object-fit: cover;
+  }
+  .user-menu {
+    position: absolute; top: 56px; right: 16px; z-index: 100;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 8px; min-width: 160px;
+    display: none; flex-direction: column; gap: 4px;
+  }
+  .user-menu.open { display: flex; }
+  .user-menu-name { font-size: 12px; color: var(--muted); padding: 4px 8px; }
+  .user-menu-btn {
+    background: none; border: none; color: var(--danger); text-align: left;
+    padding: 7px 8px; border-radius: 6px; font-size: 13px; cursor: pointer;
+    font-family: 'DM Sans', sans-serif; font-weight: 500;
+  }
+  .user-menu-btn:hover { background: rgba(255,68,68,.08); }
 </style>
 </head>
 <body>
@@ -283,9 +322,18 @@
 </div>
 
 <div id="app">
-  <header>
+  <header style="position:relative">
     <h1>Grind Log</h1>
-    <span class="week-label" id="week-label"></span>
+    <div class="header-right">
+      <span class="week-label" id="week-label"></span>
+      <span class="sync-dot" id="sync-dot" title="Sync status"></span>
+      <button class="auth-btn" id="auth-btn" onclick="handleAuthClick()">Sign in</button>
+      <img class="user-avatar" id="user-avatar" style="display:none" onclick="toggleUserMenu()" alt="profile">
+    </div>
+    <div class="user-menu" id="user-menu">
+      <span class="user-menu-name" id="user-menu-name"></span>
+      <button class="user-menu-btn" onclick="signOut()">Sign out</button>
+    </div>
   </header>
 
   <div id="tabs-content">
@@ -387,6 +435,114 @@
 <div class="toast" id="toast"></div>
 
 <script>
+// ── Firebase ───────────────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyBWg4bjwtKfFTpN8wAHaIBUViB1hAYU-IM",
+  authDomain: "fitnessapp-8b796.firebaseapp.com",
+  projectId: "fitnessapp-8b796",
+  storageBucket: "fitnessapp-8b796.firebasestorage.app",
+  messagingSenderId: "149539661475",
+  appId: "1:149539661475:web:2f0cc43c0c471ff365c116"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db   = firebase.firestore();
+let currentUser = null;
+
+function setSyncDot(state) {
+  const dot = document.getElementById('sync-dot');
+  dot.className = 'sync-dot ' + state; // synced | syncing | error | (blank=offline)
+}
+
+function sessionsRef() {
+  return db.collection('users').doc(currentUser.uid).collection('sessions');
+}
+
+async function syncFromFirestore() {
+  setSyncDot('syncing');
+  try {
+    const snap = await sessionsRef().get();
+    const remote = snap.docs.map(d => d.data());
+    // Merge: union by id, remote wins on conflict
+    const map = new Map(sessions.map(s => [s.id, s]));
+    remote.forEach(s => map.set(s.id, s));
+    sessions = [...map.values()];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+    setSyncDot('synced');
+    initDayStrip();
+    renderHistory();
+  } catch(e) {
+    console.error(e);
+    setSyncDot('error');
+  }
+}
+
+async function writeSessionToFirestore(session) {
+  if (!currentUser) return;
+  setSyncDot('syncing');
+  try {
+    await sessionsRef().doc(String(session.id)).set(session);
+    setSyncDot('synced');
+  } catch(e) {
+    console.error(e);
+    setSyncDot('error');
+  }
+}
+
+async function deleteSessionFromFirestore(id) {
+  if (!currentUser) return;
+  setSyncDot('syncing');
+  try {
+    await sessionsRef().doc(String(id)).delete();
+    setSyncDot('synced');
+  } catch(e) {
+    console.error(e);
+    setSyncDot('error');
+  }
+}
+
+function handleAuthClick() {
+  const provider = new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(provider).catch(console.error);
+}
+
+function signOut() {
+  toggleUserMenu();
+  auth.signOut();
+}
+
+function toggleUserMenu() {
+  document.getElementById('user-menu').classList.toggle('open');
+}
+
+// Close user menu on outside click
+document.addEventListener('click', e => {
+  const menu = document.getElementById('user-menu');
+  if (!menu.contains(e.target) && e.target.id !== 'user-avatar') {
+    menu.classList.remove('open');
+  }
+});
+
+auth.onAuthStateChanged(user => {
+  currentUser = user;
+  const authBtn   = document.getElementById('auth-btn');
+  const avatar    = document.getElementById('user-avatar');
+  const menuName  = document.getElementById('user-menu-name');
+  if (user) {
+    authBtn.style.display = 'none';
+    avatar.style.display  = 'block';
+    avatar.src = user.photoURL || '';
+    menuName.textContent  = user.displayName || user.email;
+    setSyncDot('syncing');
+    syncFromFirestore();
+  } else {
+    authBtn.style.display = 'block';
+    avatar.style.display  = 'none';
+    document.getElementById('user-menu').classList.remove('open');
+    setSyncDot('');
+  }
+});
+
 // ── State ──────────────────────────────────────────────────────────
 const STORAGE_KEY = 'grindlog-sessions';
 let sessions = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
@@ -413,8 +569,9 @@ const DEFAULT_EXERCISES = [
 let currentExercises = [];
 
 // ── Helpers ────────────────────────────────────────────────────────
-function saveSessions() {
+function saveSessions(sessionToSync) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+  if (sessionToSync) writeSessionToFirestore(sessionToSync);
 }
 
 function getWeekNumber(d) {
@@ -692,7 +849,7 @@ function saveSession() {
   }
 
   sessions.push(session);
-  saveSessions();
+  saveSessions(session);
 
   toastMsg('Session saved!');
   resetForm();
@@ -772,6 +929,7 @@ function deleteSession(id) {
   if (!confirm('Delete this session?')) return;
   sessions = sessions.filter(s => s.id !== id);
   saveSessions();
+  deleteSessionFromFirestore(id);
   renderHistory();
   initDayStrip();
   toastMsg('Session deleted');
