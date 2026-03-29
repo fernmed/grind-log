@@ -258,22 +258,73 @@
     padding-top: 12px;
   }
   .history-item.expanded .history-body { display: block; }
-  .history-exercise { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
-  .history-exercise strong { color: var(--text); }
+
+  /* History expanded sections */
+  .hist-section { margin-bottom: 14px; }
+  .hist-section:last-of-type { margin-bottom: 0; }
+  .hist-section-title {
+    font-family: 'Bebas Neue', sans-serif; font-size: 13px; letter-spacing: 1px;
+    color: var(--muted); margin-bottom: 8px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .hist-section-title::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+  .hist-ex { margin-bottom: 10px; }
+  .hist-ex:last-child { margin-bottom: 0; }
+  .hist-ex-name { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 5px; }
+  .hist-sets-table { width: 100%; border-collapse: collapse; }
+  .hist-sets-table th {
+    font-size: 10px; color: var(--muted); font-weight: 600; text-transform: uppercase;
+    letter-spacing: .5px; text-align: center; padding: 0 6px 4px;
+  }
+  .hist-sets-table th:first-child { text-align: left; width: 28px; }
+  .hist-sets-table td {
+    font-size: 13px; color: var(--text); text-align: center;
+    padding: 3px 6px; background: var(--bg); border-radius: 0;
+  }
+  .hist-sets-table tr:first-child td { border-radius: 6px 6px 0 0; }
+  .hist-sets-table tr:last-child td { border-radius: 0 0 6px 6px; }
+  .hist-sets-table tr:only-child td { border-radius: 6px; }
+  .hist-sets-table td:first-child { color: var(--muted); font-size: 11px; font-weight: 600; text-align: left; }
+  .hist-cardio-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .hist-cardio-item {
+    background: var(--bg); border-radius: 8px; padding: 8px 10px; text-align: center;
+  }
+  .hist-cardio-label { font-size: 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+  .hist-cardio-value { font-size: 14px; font-weight: 600; color: var(--text); margin-top: 2px; }
+  .hist-notes {
+    background: var(--bg); border-radius: 8px; padding: 10px 12px;
+    font-size: 13px; color: var(--muted); font-style: italic; line-height: 1.5;
+  }
+  .hist-footer { display: flex; justify-content: flex-end; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
   .delete-btn {
     background: none; border: 1px solid var(--danger); color: var(--danger);
-    border-radius: 8px; padding: 5px 10px; font-size: 12px; cursor: pointer;
-    margin-top: 10px; font-family: 'DM Sans', sans-serif;
+    border-radius: 8px; padding: 5px 12px; font-size: 12px; cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
   }
 
   /* Progress */
-  .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
+  .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px; }
   .stat-box {
     background: var(--surface); border: 1px solid var(--border);
     border-radius: 12px; padding: 14px 10px; text-align: center;
   }
   .stat-num { font-family: 'Bebas Neue', sans-serif; font-size: 32px; color: var(--accent); line-height: 1; }
   .stat-label { font-size: 11px; color: var(--muted); margin-top: 3px; font-weight: 500; }
+  .stat-num.fire { color: var(--accent2); }
+  .highlights-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+  .highlight-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 4px;
+  }
+  .highlight-icon { font-size: 20px; line-height: 1; }
+  .highlight-label { font-size: 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+  .highlight-value { font-size: 15px; font-weight: 600; color: var(--text); line-height: 1.2; }
+  .highlight-sub { font-size: 11px; color: var(--muted); }
   .chart-select {
     width: 100%; background: var(--surface); border: 1px solid var(--border);
     border-radius: 8px; color: var(--text); font-size: 14px; padding: 10px 12px;
@@ -474,6 +525,21 @@
           <div class="stat-label">Cardio Days</div>
         </div>
       </div>
+      <div class="stat-grid">
+        <div class="stat-box">
+          <div class="stat-num fire" id="stat-streak">0</div>
+          <div class="stat-label">🔥 Streak</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num" id="stat-best-streak">0</div>
+          <div class="stat-label">🏆 Best Streak</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num" id="stat-this-week">0</div>
+          <div class="stat-label">This Week</div>
+        </div>
+      </div>
+      <div class="highlights-grid" id="highlights-grid"></div>
       <select class="chart-select" id="ex-select" onchange="renderChart()">
         <option value="">Select exercise to chart…</option>
       </select>
@@ -958,18 +1024,59 @@ function renderHistory() {
     }).join('');
 
     let bodyHTML = '';
+
     if (sess.exercises && sess.exercises.length) {
-      bodyHTML += sess.exercises.map(ex => {
-        const setStr = ex.sets.map((s,i) => `Set ${i+1}: ${s.reps} reps @ ${s.weight}`).join(', ');
-        return `<div class="history-exercise"><strong>${ex.name}</strong> — ${setStr}</div>`;
-      }).join('');
+      const rows = sess.exercises.map(ex => `
+        <div class="hist-ex">
+          <div class="hist-ex-name">${ex.name}</div>
+          <table class="hist-sets-table">
+            <thead><tr>
+              <th>#</th><th>Reps</th><th>Weight</th>
+            </tr></thead>
+            <tbody>
+              ${ex.sets.map((s,i) => `
+                <tr>
+                  <td>${i+1}</td>
+                  <td>${s.reps}</td>
+                  <td>${s.weight}</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`).join('');
+      bodyHTML += `
+        <div class="hist-section">
+          <div class="hist-section-title">🏋️ Lift</div>
+          ${rows}
+        </div>`;
     }
+
     if (sess.cardioData) {
       const c = sess.cardioData;
-      bodyHTML += `<div class="history-exercise"><strong>${capitalize(c.type)}</strong> — ${c.duration}${c.distance?' · '+c.distance:''}${c.pace?' · '+c.pace:''}</div>`;
+      const items = [
+        { label: 'Type',     value: capitalize(c.type) },
+        { label: 'Duration', value: c.duration || '—' },
+        { label: 'Distance', value: c.distance || '—' },
+        { label: 'Pace',     value: c.pace     || '—' },
+      ].filter((it, i) => i === 0 || it.value !== '—');
+      bodyHTML += `
+        <div class="hist-section">
+          <div class="hist-section-title">🏃 Cardio</div>
+          <div class="hist-cardio-grid">
+            ${items.map(it => `
+              <div class="hist-cardio-item">
+                <div class="hist-cardio-label">${it.label}</div>
+                <div class="hist-cardio-value">${it.value}</div>
+              </div>`).join('')}
+          </div>
+        </div>`;
     }
+
     if (sess.notes) {
-      bodyHTML += `<div class="history-exercise" style="margin-top:8px;font-style:italic;color:var(--muted)">"${sess.notes}"</div>`;
+      bodyHTML += `
+        <div class="hist-section">
+          <div class="hist-section-title">📝 Notes</div>
+          <div class="hist-notes">"${sess.notes}"</div>
+        </div>`;
     }
 
     div.innerHTML = `
@@ -984,7 +1091,9 @@ function renderHistory() {
       </div>
       <div class="history-body">
         ${bodyHTML}
-        <button class="delete-btn" onclick="deleteSession(${sess.id})">Delete Session</button>
+        <div class="hist-footer">
+          <button class="delete-btn" onclick="deleteSession(${sess.id})">Delete Session</button>
+        </div>
       </div>
     `;
     list.appendChild(div);
@@ -1001,14 +1110,121 @@ function deleteSession(id) {
   toastMsg('Session deleted');
 }
 
+// ── Progress helpers ────────────────────────────────────────────────
+function computeStreaks() {
+  if (!sessions.length) return { current: 0, best: 0 };
+  const DAY = 86400000;
+  const timestamps = [...new Set(sessions.map(s => {
+    const d = new Date(s.date); d.setHours(0,0,0,0); return d.getTime();
+  }))].sort((a,b) => b - a);
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  let current = 0;
+  if (timestamps[0] >= today.getTime() - DAY) {
+    current = 1;
+    for (let i = 1; i < timestamps.length; i++) {
+      if (timestamps[i-1] - timestamps[i] === DAY) current++;
+      else break;
+    }
+  }
+  let best = 1, run = 1;
+  for (let i = 1; i < timestamps.length; i++) {
+    run = timestamps[i-1] - timestamps[i] === DAY ? run + 1 : 1;
+    best = Math.max(best, run);
+  }
+  return { current, best: Math.max(best, current) };
+}
+
+function getThisWeekCount() {
+  const weekDates = new Set(getWeekDates().map(d => dateStr(d)));
+  return sessions.filter(s => weekDates.has(s.date)).length;
+}
+
+function getTopExercise() {
+  const counts = new Map();
+  sessions.forEach(s => (s.exercises||[]).forEach(ex => {
+    counts.set(ex.name, (counts.get(ex.name)||0) + 1);
+  }));
+  if (!counts.size) return null;
+  const [name, n] = [...counts.entries()].sort((a,b) => b[1]-a[1])[0];
+  return { name, n };
+}
+
+function getTotalSets() {
+  return sessions.reduce((sum, s) =>
+    sum + (s.exercises||[]).reduce((es, ex) => es + ex.sets.length, 0), 0);
+}
+
+function getTopCardio() {
+  const counts = new Map();
+  sessions.forEach(s => { if (s.cardioType) counts.set(s.cardioType, (counts.get(s.cardioType)||0) + 1); });
+  if (!counts.size) return null;
+  const [type, n] = [...counts.entries()].sort((a,b) => b[1]-a[1])[0];
+  return { type, n };
+}
+
+function getAvgPerWeek() {
+  if (sessions.length < 2) return sessions.length;
+  const timestamps = sessions.map(s => new Date(s.date).getTime());
+  const spanDays = (Math.max(...timestamps) - Math.min(...timestamps)) / 86400000 + 1;
+  const weeks = Math.max(1, spanDays / 7);
+  return (sessions.length / weeks).toFixed(1);
+}
+
+function renderHighlights() {
+  const topEx   = getTopExercise();
+  const topC    = getTopCardio();
+  const sets    = getTotalSets();
+  const avg     = getAvgPerWeek();
+
+  const cards = [
+    {
+      icon: '💪', label: 'Top Exercise',
+      value: topEx ? topEx.name : '—',
+      sub: topEx ? `${topEx.n} session${topEx.n!==1?'s':''}` : 'No lift data yet',
+    },
+    {
+      icon: '📦', label: 'Total Sets Logged',
+      value: sets || '—',
+      sub: sets ? 'across all sessions' : 'No lift data yet',
+    },
+    {
+      icon: '🏃', label: 'Favourite Cardio',
+      value: topC ? capitalize(topC.type) : '—',
+      sub: topC ? `${topC.n} session${topC.n!==1?'s':''}` : 'No cardio data yet',
+    },
+    {
+      icon: '📅', label: 'Avg / Week',
+      value: avg,
+      sub: 'sessions per week',
+    },
+  ];
+
+  document.getElementById('highlights-grid').innerHTML = cards.map(c => `
+    <div class="highlight-box">
+      <span class="highlight-icon">${c.icon}</span>
+      <span class="highlight-label">${c.label}</span>
+      <span class="highlight-value">${c.value}</span>
+      <span class="highlight-sub">${c.sub}</span>
+    </div>`).join('');
+}
+
 // ── Progress tab ───────────────────────────────────────────────────
 function renderProgress() {
-  const total = sessions.length;
-  const liftCount = sessions.filter(s => s.activities&&s.activities.includes('lift')).length;
-  const cardioCount = sessions.filter(s => s.activities&&s.activities.includes('cardio')).length;
-  document.getElementById('stat-total').textContent = total;
-  document.getElementById('stat-lift').textContent = liftCount;
-  document.getElementById('stat-cardio').textContent = cardioCount;
+  const total      = sessions.length;
+  const liftCount  = sessions.filter(s => s.activities&&s.activities.includes('lift')).length;
+  const cardioCount= sessions.filter(s => s.activities&&s.activities.includes('cardio')).length;
+  const { current, best } = computeStreaks();
+  const thisWeek   = getThisWeekCount();
+
+  document.getElementById('stat-total').textContent      = total;
+  document.getElementById('stat-lift').textContent       = liftCount;
+  document.getElementById('stat-cardio').textContent     = cardioCount;
+  document.getElementById('stat-streak').textContent     = current;
+  document.getElementById('stat-best-streak').textContent= best;
+  document.getElementById('stat-this-week').textContent  = thisWeek;
+
+  renderHighlights();
 
   // Populate exercise dropdown
   const select = document.getElementById('ex-select');
@@ -1018,14 +1234,12 @@ function renderProgress() {
       if (!allExercises.has(ex.id)) allExercises.set(ex.id, ex.name);
     });
   });
-
-  const current = select.value;
+  const current2 = select.value;
   select.innerHTML = '<option value="">Select exercise to chart…</option>';
   allExercises.forEach((name, id) => {
     const opt = document.createElement('option');
-    opt.value = id;
-    opt.textContent = name;
-    if (id === current) opt.selected = true;
+    opt.value = id; opt.textContent = name;
+    if (id === current2) opt.selected = true;
     select.appendChild(opt);
   });
 
