@@ -1660,6 +1660,15 @@ function stravaLoadActivity(id) {
   const a = (window._stravaActivities || []).find(x => x.id === id);
   if (!a) return;
 
+  // Set session date to match the activity date
+  const activityDate = new Date(a.start_date_local);
+  const ds = dateStr(activityDate);
+  window._selectedDate = ds;
+  const weekDates = getWeekDates();
+  const matchIdx = weekDates.findIndex(d => dateStr(d) === ds);
+  if (matchIdx !== -1) window._selectedMonIdx = matchIdx;
+  initDayStrip();
+
   selectedCardioType = STRAVA_TYPE_MAP[a.type] || 'other';
   initCardioTypes();
   document.getElementById('cardio-duration').value = stravaFmtDuration(a.elapsed_time);
