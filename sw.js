@@ -1,4 +1,4 @@
-const CACHE_NAME = 'grindlog-v1';
+const CACHE_NAME = 'grindlog-v2';
 const ASSETS = ['./index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -18,7 +18,24 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  e.respondWith(
-    caches.match(e.request).then(cached => cached || fetch(e.request))
-  );
+  const url = new URL(e.request.url);
+  const isHTML = e.request.destination === 'document' || url.pathname.endsWith('.html') || url.pathname === '/';
+
+  if (isHTML) {
+    // Network-first for HTML: always try to get latest, fall back to cache if offline
+    e.respondWith(
+      fetch(e.request)
+        .then(response => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
+          return response;
+        })
+        .catch(() => caches.match(e.request))
+    );
+  } else {
+    // Cache-first for static assets (icons, manifest)
+    e.respondWith(
+      caches.match(e.request).then(cached => cached || fetch(e.request))
+    );
+  }
 });
