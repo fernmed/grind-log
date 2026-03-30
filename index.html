@@ -367,6 +367,52 @@
   }
   .theme-btn:hover { border-color: var(--accent); color: var(--accent); }
 
+  /* ── Load Previous Session ──────────────────────────── */
+  .load-prev-btn {
+    width: 100%; padding: 10px 14px; background: none;
+    border: 1.5px dashed var(--border); border-radius: 10px;
+    color: var(--muted); font-size: 13px; font-weight: 500;
+    cursor: pointer; font-family: 'DM Sans', sans-serif;
+    margin-bottom: 14px; transition: all .15s;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .load-prev-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── Bottom sheet ────────────────────────────────────── */
+  .sheet-overlay {
+    display: none; position: fixed; inset: 0; z-index: 200;
+    background: rgba(0,0,0,.5);
+  }
+  .sheet-overlay.open { display: block; }
+  .bottom-sheet {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 201;
+    background: var(--surface); border-top: 1px solid var(--border);
+    border-radius: 18px 18px 0 0;
+    padding-bottom: calc(var(--safe-bottom) + 8px);
+    transform: translateY(100%); transition: transform .3s cubic-bezier(.4,0,.2,1);
+    max-height: 70vh; display: flex; flex-direction: column;
+  }
+  .bottom-sheet.open { transform: translateY(0); }
+  .sheet-handle {
+    width: 36px; height: 4px; background: var(--border); border-radius: 2px;
+    margin: 12px auto 0; flex-shrink: 0;
+  }
+  .sheet-title {
+    font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: .5px;
+    color: var(--text); padding: 12px 18px 10px; border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .sheet-list { overflow-y: auto; flex: 1; }
+  .sheet-row {
+    padding: 14px 18px; border-bottom: 1px solid var(--border);
+    cursor: pointer; transition: background .15s;
+  }
+  .sheet-row:last-child { border-bottom: none; }
+  .sheet-row:active { background: var(--surface2); }
+  .sheet-row-date { font-weight: 600; font-size: 14px; color: var(--text); }
+  .sheet-row-hint { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .sheet-empty { padding: 32px 18px; text-align: center; color: var(--muted); font-size: 14px; }
+
   /* ── Responsive desktop layout ─────────────────────── */
   #main-body { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
 
@@ -444,6 +490,7 @@
       <div id="lift-section" style="display:none">
         <div class="section-card">
           <div class="section-title">EXERCISES</div>
+          <button class="load-prev-btn" id="load-prev-btn" onclick="openSessionPicker()">↩ Load Previous Session</button>
           <div id="exercise-list"></div>
           <div class="add-exercise-row">
             <input type="text" id="new-ex-input" placeholder="Add exercise name…" onkeydown="if(event.key==='Enter')addCustomExercise()">
@@ -545,6 +592,13 @@
 
 <div class="toast" id="toast"></div>
 
+<div class="sheet-overlay" id="sheet-overlay" onclick="closeSessionPicker()"></div>
+<div class="bottom-sheet" id="session-picker">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title">LOAD PREVIOUS SESSION</div>
+  <div class="sheet-list" id="sheet-list"></div>
+</div>
+
 <script>
 // ── Firebase ───────────────────────────────────────────────────────
 const firebaseConfig = {
@@ -582,6 +636,7 @@ async function syncFromFirestore() {
     setSyncDot('synced');
     initDayStrip();
     renderHistory();
+    updateLoadPrevBtn();
   } catch(e) {
     console.error(e);
     setSyncDot('error');
@@ -1345,6 +1400,72 @@ function renderChart() {
   }
 }
 
+// ── Load Previous Session ──────────────────────────────────────────
+function getPastLiftSessions() {
+  return [...sessions]
+    .filter(s => s.exercises && s.exercises.length > 0)
+    .sort((a, b) => b.id - a.id);
+}
+
+function updateLoadPrevBtn() {
+  const btn = document.getElementById('load-prev-btn');
+  if (!btn) return;
+  btn.style.display = getPastLiftSessions().length > 0 ? '' : 'none';
+}
+
+function formatPickerDate(ds) {
+  const d = new Date(ds);
+  if (isNaN(d)) return ds;
+  const day = d.toLocaleDateString('en-US', { weekday: 'long' });
+  const md  = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return `${day} · ${md}`;
+}
+
+function openSessionPicker() {
+  const past = getPastLiftSessions();
+  const list = document.getElementById('sheet-list');
+
+  if (!past.length) {
+    list.innerHTML = '<div class="sheet-empty">No previous lift sessions found.</div>';
+  } else {
+    list.innerHTML = past.map(s => {
+      const count = s.exercises.length;
+      const preview = s.exercises.slice(0, 3).map(e => e.name).join(', ');
+      const hint = `${count} exercise${count !== 1 ? 's' : ''} · ${preview}${count > 3 ? '…' : ''}`;
+      return `
+        <div class="sheet-row" onclick="loadSessionExercises(${s.id})">
+          <div class="sheet-row-date">${formatPickerDate(s.date)}</div>
+          <div class="sheet-row-hint">${hint}</div>
+        </div>`;
+    }).join('');
+  }
+
+  document.getElementById('sheet-overlay').classList.add('open');
+  document.getElementById('session-picker').classList.add('open');
+}
+
+function closeSessionPicker() {
+  document.getElementById('sheet-overlay').classList.remove('open');
+  document.getElementById('session-picker').classList.remove('open');
+}
+
+function loadSessionExercises(sessionId) {
+  closeSessionPicker();
+  const sess = sessions.find(s => s.id === sessionId);
+  if (!sess || !sess.exercises) return;
+
+  const doLoad = () => {
+    currentExercises = JSON.parse(JSON.stringify(sess.exercises));
+    renderExercises();
+  };
+
+  if (currentExercises.length > 0) {
+    if (confirm('This will replace your current exercises. Continue?')) doLoad();
+  } else {
+    doLoad();
+  }
+}
+
 // ── Tab switching ──────────────────────────────────────────────────
 function switchTab(name) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
@@ -1391,6 +1512,7 @@ function init() {
   initDayStrip();
   initCardioTypes();
   initExercises();
+  updateLoadPrevBtn();
   checkInstallBanner();
 }
 
