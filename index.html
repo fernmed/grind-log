@@ -367,6 +367,44 @@
   }
   .theme-btn:hover { border-color: var(--accent); color: var(--accent); }
 
+  /* ── Milestones ──────────────────────────────────────── */
+  .milestone-total { display: flex; align-items: baseline; gap: 8px; margin-bottom: 12px; }
+  .milestone-total-num { font-family: 'Bebas Neue', sans-serif; font-size: 48px; color: var(--accent); line-height: 1; }
+  .milestone-total-unit { font-size: 15px; color: var(--muted); font-weight: 500; }
+  .milestone-next { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .milestone-bar-track { height: 6px; background: var(--surface2); border-radius: 3px; margin-bottom: 20px; }
+  .milestone-bar-fill { height: 100%; background: var(--accent-hi); border-radius: 3px; transition: width .6s ease; }
+  .milestone-badges { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .milestone-badge {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px 6px; text-align: center;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .milestone-badge.unlocked { border-color: var(--accent); background: rgba(253,185,39,.06); }
+  .milestone-badge.locked .badge-emoji { filter: grayscale(1); opacity: .35; }
+  .milestone-badge.locked .badge-miles { color: var(--muted); }
+  .badge-emoji { font-size: 24px; line-height: 1; }
+  .badge-miles { font-family: 'Bebas Neue', sans-serif; font-size: 15px; color: var(--accent); }
+  .badge-label { font-size: 9px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .3px; line-height: 1.3; }
+
+  /* ── Milestone celebration overlay ───────────────────── */
+  .milestone-overlay {
+    display: none; position: fixed; inset: 0; z-index: 300;
+    background: rgba(0,0,0,.88);
+    flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 40px; cursor: pointer;
+  }
+  .milestone-overlay.show { display: flex; animation: milestoneIn .45s cubic-bezier(.22,1,.36,1); }
+  @keyframes milestoneIn {
+    from { opacity: 0; transform: scale(.88); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+  .cel-emoji  { font-size: 88px; line-height: 1; margin-bottom: 24px; }
+  .cel-title  { font-family: 'Bebas Neue', sans-serif; font-size: 13px; letter-spacing: 4px; color: var(--muted); margin-bottom: 10px; }
+  .cel-name   { font-family: 'Bebas Neue', sans-serif; font-size: 52px; letter-spacing: 2px; color: var(--accent); line-height: 1; margin-bottom: 10px; }
+  .cel-miles  { font-size: 18px; color: var(--text); font-weight: 600; margin-bottom: 36px; }
+  .cel-hint   { font-size: 12px; color: var(--muted); }
+
   /* ── Strava ──────────────────────────────────────────── */
   .strava-btn {
     background: none; border: 1px solid #FC4C02; color: #FC4C02;
@@ -587,6 +625,7 @@
         </div>
       </div>
       <div class="highlights-grid" id="highlights-grid"></div>
+      <div id="milestones-section" style="margin-bottom:24px"></div>
       <select class="chart-select" id="ex-select" onchange="renderChart()">
         <option value="">Select exercise to chart…</option>
       </select>
@@ -612,6 +651,14 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<div class="milestone-overlay" id="milestone-overlay" onclick="this.classList.remove('show')">
+  <div class="cel-emoji" id="cel-emoji"></div>
+  <div class="cel-title">MILESTONE UNLOCKED</div>
+  <div class="cel-name" id="cel-name"></div>
+  <div class="cel-miles" id="cel-miles"></div>
+  <div class="cel-hint">tap to dismiss</div>
+</div>
 
 <div class="sheet-overlay" id="sheet-overlay" onclick="closeSessionPicker()"></div>
 <div class="bottom-sheet" id="session-picker">
@@ -1038,6 +1085,7 @@ function saveSession() {
 
   sessions.push(session);
   saveSessions(session);
+  checkNewMilestones();
 
   toastMsg('Session saved!');
   resetForm();
@@ -1263,6 +1311,7 @@ function renderProgress() {
   document.getElementById('stat-this-week').textContent  = thisWeek;
 
   renderHighlights();
+  renderMilestones();
 
   // Populate exercise dropdown
   const select = document.getElementById('ex-select');
@@ -1487,6 +1536,83 @@ function loadSessionExercises(sessionId) {
   } else {
     doLoad();
   }
+}
+
+// ── Milestones ────────────────────────────────────────────────────
+const MILESTONES = [
+  { miles: 10,   emoji: '👟', label: 'First Steps' },
+  { miles: 25,   emoji: '🏃', label: 'Getting Moving' },
+  { miles: 50,   emoji: '🔥', label: 'Half Century' },
+  { miles: 100,  emoji: '💯', label: 'Century Club' },
+  { miles: 250,  emoji: '⚡', label: 'Quarter Grand' },
+  { miles: 500,  emoji: '🏆', label: 'Iron Legs' },
+  { miles: 1000, emoji: '🌟', label: '1K Legend' },
+];
+const CELEBRATED_KEY = 'grindlog-celebrated';
+
+function parseMiles(str) {
+  if (!str) return 0;
+  const m = String(str).match(/[\d.]+/);
+  return m ? parseFloat(m[0]) : 0;
+}
+
+function getTotalMiles() {
+  return sessions.reduce((sum, s) =>
+    sum + parseMiles(s.cardioData && s.cardioData.distance), 0);
+}
+
+function renderMilestones() {
+  const container = document.getElementById('milestones-section');
+  if (!container) return;
+
+  const total = getTotalMiles();
+  const unlocked = MILESTONES.filter(m => total >= m.miles);
+  const next = MILESTONES.find(m => total < m.miles);
+  const prev = unlocked[unlocked.length - 1];
+
+  const from = prev ? prev.miles : 0;
+  const to   = next ? next.miles : (prev ? prev.miles : MILESTONES[0].miles);
+  const pct  = next ? Math.min(100, ((total - from) / (to - from)) * 100) : 100;
+  const nextLabel = next
+    ? `${(next.miles - total).toFixed(1)} mi to ${next.label}`
+    : 'All milestones reached! 🎉';
+
+  container.innerHTML = `
+    <div class="section-title" style="margin-bottom:14px">MILESTONES</div>
+    <div class="milestone-total">
+      <span class="milestone-total-num">${total.toFixed(1)}</span>
+      <span class="milestone-total-unit">miles logged</span>
+    </div>
+    <div class="milestone-next">${nextLabel}</div>
+    <div class="milestone-bar-track">
+      <div class="milestone-bar-fill" style="width:${pct}%"></div>
+    </div>
+    <div class="milestone-badges">
+      ${MILESTONES.map(m => `
+        <div class="milestone-badge ${total >= m.miles ? 'unlocked' : 'locked'}">
+          <span class="badge-emoji">${m.emoji}</span>
+          <span class="badge-miles">${m.miles} mi</span>
+          <span class="badge-label">${m.label}</span>
+        </div>`).join('')}
+    </div>`;
+}
+
+function checkNewMilestones() {
+  const total = getTotalMiles();
+  const celebrated = JSON.parse(localStorage.getItem(CELEBRATED_KEY) || '[]');
+  const newOnes = MILESTONES.filter(m => total >= m.miles && !celebrated.includes(m.miles));
+  if (!newOnes.length) return;
+  localStorage.setItem(CELEBRATED_KEY, JSON.stringify([...celebrated, ...newOnes.map(m => m.miles)]));
+  showMilestoneCelebration(newOnes[newOnes.length - 1]);
+}
+
+function showMilestoneCelebration(m) {
+  document.getElementById('cel-emoji').textContent = m.emoji;
+  document.getElementById('cel-name').textContent  = m.label;
+  document.getElementById('cel-miles').textContent = `${m.miles} miles`;
+  const overlay = document.getElementById('milestone-overlay');
+  overlay.classList.add('show');
+  setTimeout(() => overlay.classList.remove('show'), 5000);
 }
 
 // ── Strava ────────────────────────────────────────────────────────
