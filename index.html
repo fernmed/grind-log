@@ -367,6 +367,25 @@
   }
   .theme-btn:hover { border-color: var(--accent); color: var(--accent); }
 
+  /* ── Strava ──────────────────────────────────────────── */
+  .strava-btn {
+    background: none; border: 1px solid #FC4C02; color: #FC4C02;
+    border-radius: 8px; padding: 5px 10px; font-size: 12px; font-weight: 500;
+    cursor: pointer; font-family: 'DM Sans', sans-serif; white-space: nowrap;
+    transition: all .15s;
+  }
+  .strava-btn:hover { background: rgba(252,76,2,.1); }
+  .strava-btn.connected { border-color: var(--border); color: var(--muted); }
+  .import-strava-btn {
+    width: 100%; padding: 10px 14px; background: none;
+    border: 1.5px solid #FC4C02; border-radius: 10px;
+    color: #FC4C02; font-size: 13px; font-weight: 500;
+    cursor: pointer; font-family: 'DM Sans', sans-serif;
+    margin-bottom: 14px; transition: all .15s;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .import-strava-btn:hover { background: rgba(252,76,2,.08); }
+
   /* ── Load Previous Session ──────────────────────────── */
   .load-prev-btn {
     width: 100%; padding: 10px 14px; background: none;
@@ -466,6 +485,7 @@
     <div class="header-right">
       <span class="week-label" id="week-label"></span>
       <button class="theme-btn" id="theme-btn" onclick="toggleTheme()" title="Toggle theme">☀️</button>
+      <button class="strava-btn" id="strava-btn" style="display:none" onclick="stravaConnect()">Connect Strava</button>
       <span class="sync-dot" id="sync-dot" title="Sync status"></span>
       <button class="auth-btn" id="auth-btn" onclick="handleAuthClick()">Sign in</button>
       <img class="user-avatar" id="user-avatar" style="display:none" onclick="toggleUserMenu()" alt="profile">
@@ -503,6 +523,7 @@
         <div class="section-card">
           <div class="section-title">CARDIO</div>
           <div class="cardio-types" id="cardio-types"></div>
+          <button class="import-strava-btn" id="import-strava-btn" style="display:none" onclick="stravaImport()">⚡ Import from Strava</button>
           <div class="form-grid">
             <div class="form-field">
               <label>Duration</label>
@@ -595,7 +616,7 @@
 <div class="sheet-overlay" id="sheet-overlay" onclick="closeSessionPicker()"></div>
 <div class="bottom-sheet" id="session-picker">
   <div class="sheet-handle"></div>
-  <div class="sheet-title">LOAD PREVIOUS SESSION</div>
+  <div class="sheet-title" id="sheet-title">LOAD PREVIOUS SESSION</div>
   <div class="sheet-list" id="sheet-list"></div>
 </div>
 
@@ -856,6 +877,7 @@ function toggleActivity(type) {
   document.getElementById('toggle-cardio').classList.toggle('active', selectedActivities.has('cardio'));
   document.getElementById('lift-section').style.display = selectedActivities.has('lift') ? 'block' : 'none';
   document.getElementById('cardio-section').style.display = selectedActivities.has('cardio') ? 'block' : 'none';
+  stravaUpdateUI();
 }
 
 // ── Cardio types ───────────────────────────────────────────────────
@@ -1422,6 +1444,7 @@ function formatPickerDate(ds) {
 }
 
 function openSessionPicker() {
+  document.getElementById('sheet-title').textContent = 'LOAD PREVIOUS SESSION';
   const past = getPastLiftSessions();
   const list = document.getElementById('sheet-list');
 
@@ -1464,6 +1487,185 @@ function loadSessionExercises(sessionId) {
   } else {
     doLoad();
   }
+}
+
+// ── Strava ────────────────────────────────────────────────────────
+const STRAVA_CLIENT_ID     = '218060';
+const STRAVA_CLIENT_SECRET = 'f40d58d93cd0823f5179adcb18a3763c1de565da';
+const STRAVA_REDIRECT_URI  = 'https://fernmed.github.io/grind-log/';
+const STRAVA_TOKEN_KEY     = 'grindlog-strava';
+
+function stravaGetStored() {
+  return JSON.parse(localStorage.getItem(STRAVA_TOKEN_KEY) || 'null');
+}
+
+function stravaUpdateUI() {
+  const t = stravaGetStored();
+  const btn = document.getElementById('strava-btn');
+  const importBtn = document.getElementById('import-strava-btn');
+  if (!btn) return;
+  btn.style.display = '';
+  if (t) {
+    btn.textContent = '🟠 Strava';
+    btn.classList.add('connected');
+    btn.onclick = stravaDisconnect;
+    if (importBtn) importBtn.style.display = selectedActivities.has('cardio') ? '' : 'none';
+  } else {
+    btn.textContent = 'Connect Strava';
+    btn.classList.remove('connected');
+    btn.onclick = stravaConnect;
+    if (importBtn) importBtn.style.display = 'none';
+  }
+}
+
+function stravaConnect() {
+  const url = `https://www.strava.com/oauth/authorize?client_id=${STRAVA_CLIENT_ID}&redirect_uri=${encodeURIComponent(STRAVA_REDIRECT_URI)}&response_type=code&scope=activity:read_all`;
+  window.location.href = url;
+}
+
+function stravaDisconnect() {
+  if (!confirm('Disconnect Strava?')) return;
+  localStorage.removeItem(STRAVA_TOKEN_KEY);
+  stravaUpdateUI();
+  toastMsg('Strava disconnected');
+}
+
+async function stravaHandleCallback() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  if (!code) return;
+  history.replaceState({}, '', window.location.pathname);
+  try {
+    const res = await fetch('https://www.strava.com/oauth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: STRAVA_CLIENT_ID,
+        client_secret: STRAVA_CLIENT_SECRET,
+        code,
+        grant_type: 'authorization_code'
+      })
+    });
+    const data = await res.json();
+    if (data.access_token) {
+      localStorage.setItem(STRAVA_TOKEN_KEY, JSON.stringify({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        expires_at: data.expires_at
+      }));
+      stravaUpdateUI();
+      toastMsg('Strava connected!');
+    } else {
+      toastMsg('Strava auth failed');
+    }
+  } catch(e) {
+    console.error(e);
+    toastMsg('Strava auth failed');
+  }
+}
+
+async function stravaGetToken() {
+  let t = stravaGetStored();
+  if (!t) return null;
+  if (t.expires_at < Date.now() / 1000) {
+    try {
+      const res = await fetch('https://www.strava.com/oauth/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_id: STRAVA_CLIENT_ID,
+          client_secret: STRAVA_CLIENT_SECRET,
+          grant_type: 'refresh_token',
+          refresh_token: t.refresh_token
+        })
+      });
+      const data = await res.json();
+      if (data.access_token) {
+        t = { ...t, access_token: data.access_token, refresh_token: data.refresh_token, expires_at: data.expires_at };
+        localStorage.setItem(STRAVA_TOKEN_KEY, JSON.stringify(t));
+      } else {
+        localStorage.removeItem(STRAVA_TOKEN_KEY);
+        stravaUpdateUI();
+        return null;
+      }
+    } catch(e) { console.error(e); return null; }
+  }
+  return t.access_token;
+}
+
+const STRAVA_TYPE_MAP = {
+  Run: 'run', Walk: 'walk', Hike: 'walk',
+  Ride: 'cycle', VirtualRide: 'cycle', EBikeRide: 'cycle',
+};
+
+function stravaFmtDuration(s) {
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m} min`;
+}
+
+function stravaFmtDistance(meters) {
+  return `${(meters * 0.000621371).toFixed(2)} mi`;
+}
+
+function stravaFmtPace(seconds, meters) {
+  if (!meters) return '';
+  const secPerMile = seconds / (meters * 0.000621371);
+  const m = Math.floor(secPerMile / 60);
+  const s = Math.round(secPerMile % 60).toString().padStart(2, '0');
+  return `${m}:${s}/mi`;
+}
+
+async function stravaImport() {
+  const token = await stravaGetToken();
+  if (!token) { toastMsg('Connect Strava first'); return; }
+
+  let activities;
+  try {
+    const res = await fetch('https://www.strava.com/api/v3/athlete/activities?per_page=10', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error();
+    activities = await res.json();
+  } catch(e) {
+    toastMsg('Failed to fetch Strava activities');
+    return;
+  }
+
+  const relevant = activities.filter(a =>
+    ['Run','Walk','Ride','Hike','VirtualRide','EBikeRide','Swim','Workout','Elliptical','StairStepper'].includes(a.type)
+  );
+  if (!relevant.length) { toastMsg('No recent activities found'); return; }
+
+  window._stravaActivities = relevant;
+
+  const list = document.getElementById('sheet-list');
+  list.innerHTML = relevant.map(a => {
+    const d = new Date(a.start_date_local);
+    const dateLabel = d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+    const parts = [a.type, stravaFmtDuration(a.elapsed_time), a.distance ? stravaFmtDistance(a.distance) : ''].filter(Boolean);
+    return `
+      <div class="sheet-row" onclick="stravaLoadActivity(${a.id})">
+        <div class="sheet-row-date">${dateLabel} · ${a.name}</div>
+        <div class="sheet-row-hint">${parts.join(' · ')}</div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('sheet-title').textContent = 'IMPORT FROM STRAVA';
+  document.getElementById('sheet-overlay').classList.add('open');
+  document.getElementById('session-picker').classList.add('open');
+}
+
+function stravaLoadActivity(id) {
+  closeSessionPicker();
+  const a = (window._stravaActivities || []).find(x => x.id === id);
+  if (!a) return;
+
+  selectedCardioType = STRAVA_TYPE_MAP[a.type] || 'other';
+  initCardioTypes();
+  document.getElementById('cardio-duration').value = stravaFmtDuration(a.elapsed_time);
+  document.getElementById('cardio-distance').value = a.distance ? stravaFmtDistance(a.distance) : '';
+  document.getElementById('cardio-pace').value     = a.distance ? stravaFmtPace(a.elapsed_time, a.distance) : '';
+  toastMsg('Activity imported!');
 }
 
 // ── Tab switching ──────────────────────────────────────────────────
@@ -1513,6 +1715,8 @@ function init() {
   initCardioTypes();
   initExercises();
   updateLoadPrevBtn();
+  stravaUpdateUI();
+  stravaHandleCallback();
   checkInstallBanner();
 }
 
