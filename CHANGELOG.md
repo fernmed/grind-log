@@ -4,6 +4,47 @@ All notable changes to Grind Log are documented here.
 
 ---
 
+## [1.6.0] — 2026-03-29
+
+### Added
+- Personal milestones — cumulative mile counter in the Progress tab with a progress bar toward the next milestone
+- 7 milestone badges (10, 25, 50, 100, 250, 500, 1000 mi) displayed as a grid; unlocked badges highlight in gold
+- Full-screen celebration overlay fires the first time a milestone is crossed after saving a session; auto-dismisses after 5 seconds or tap to close
+- All activities with a distance field count toward the total
+
+---
+
+## [1.5.0] — 2026-03-29
+
+### Added
+- Strava integration — OAuth connect/disconnect button in the header
+- Access tokens stored in `localStorage` with automatic refresh when expired
+- "Import from Strava" button in the Cardio section (visible when connected)
+- Bottom sheet lists 10 most recent Strava activities; tapping one pre-fills cardio type, duration, distance, and pace
+- Imported activity date automatically sets the session date in the day strip
+
+---
+
+## [1.4.0] — 2026-03-29
+
+### Added
+- Load Previous Session — "↩ Load Previous Session" button at the top of the exercise area when Lift is toggled on
+- Bottom sheet lists past lift sessions in reverse chronological order, each showing day/date and exercise count with a preview of exercise names
+- Tapping a row pre-fills all exercises, sets, reps, and weights; session notes are not carried over
+- Confirmation prompt fires before replacing exercises if the current session already has exercises loaded
+- Button hidden when no past lift sessions exist
+
+---
+
+## [1.3.0] — 2026-03-29
+
+### Fixed
+- PWA no longer requires re-adding to home screen to receive updates — switched HTML fetch strategy from cache-first to network-first, with cache fallback for offline use
+- Static assets (icons, manifest) remain cache-first
+- Bumped service worker cache version to clear stale cache on first load
+
+---
+
 ## [1.2.0] — 2026-03-29
 
 ### Added
