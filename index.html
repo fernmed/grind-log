@@ -58,6 +58,15 @@
     padding: calc(var(--safe-top) + 10px) 16px 10px;
     text-align: center; font-size: 13px; color: var(--text);
   }
+  .history-toolbar {
+    display: flex; justify-content: flex-end; padding: 8px 0 4px;
+  }
+  .sort-toggle-btn {
+    background: none; border: 1px solid var(--border); border-radius: 6px;
+    color: var(--muted); font-size: 12px; padding: 4px 10px; cursor: pointer;
+  }
+  .sort-toggle-btn:active { opacity: 0.7; }
+
   #install-banner span { color: var(--accent); font-weight: 600; }
   #install-banner button {
     margin-left: 10px; background: none; border: 1px solid var(--border);
@@ -514,7 +523,7 @@
 
 <div id="install-banner">
   <span>Add to Home Screen</span> — tap Share then "Add to Home Screen" in Safari
-  <button onclick="document.getElementById('install-banner').style.display='none'">✕</button>
+  <button onclick="localStorage.setItem('grindlog-install-dismissed','1');document.getElementById('install-banner').style.display='none';document.getElementById('app').style.paddingTop=''">✕</button>
 </div>
 
 <div id="app">
@@ -591,6 +600,9 @@
 
     <!-- HISTORY TAB -->
     <div class="tab-panel" id="tab-history">
+      <div class="history-toolbar">
+        <button class="sort-toggle-btn" id="sort-toggle-btn" onclick="toggleHistorySort()"></button>
+      </div>
       <div id="history-list"></div>
     </div>
 
@@ -1108,9 +1120,18 @@ function resetForm() {
 }
 
 // ── History tab ────────────────────────────────────────────────────
+function toggleHistorySort() {
+  const current = localStorage.getItem('grindlog-history-sort') || 'desc';
+  localStorage.setItem('grindlog-history-sort', current === 'desc' ? 'asc' : 'desc');
+  renderHistory();
+}
+
 function renderHistory() {
   const list = document.getElementById('history-list');
-  const sorted = [...sessions].sort((a,b) => b.id - a.id);
+  const sortDir = localStorage.getItem('grindlog-history-sort') || 'desc';
+  const sorted = [...sessions].sort((a,b) => sortDir === 'desc' ? b.id - a.id : a.id - b.id);
+  const btn = document.getElementById('sort-toggle-btn');
+  if (btn) btn.textContent = sortDir === 'desc' ? '↓ Newest first' : '↑ Oldest first';
 
   if (!sorted.length) {
     list.innerHTML = '<div class="no-data">No sessions logged yet.</div>';
@@ -1816,6 +1837,7 @@ function switchTab(name) {
 
 // ── Install banner ─────────────────────────────────────────────────
 function checkInstallBanner() {
+  if (localStorage.getItem('grindlog-install-dismissed')) return;
   const isStandalone = window.navigator.standalone === true ||
     window.matchMedia('(display-mode: standalone)').matches;
   const isSafari = /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
